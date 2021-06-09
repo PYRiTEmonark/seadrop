@@ -57,10 +57,6 @@ $(document).ready( () => {
     socket.emit('join', '{{ s_name }}');
   });
 
-  socket.on('test', msg => {
-    console.log(msg);
-  });
-
   socket.on('add_file', msg => {
     console.log('upload');
     console.log(msg);
@@ -75,21 +71,6 @@ $(document).ready( () => {
     console.log(msg);
     $('#' + make_id_safe(msg.file)).remove();
   });
-
-  {# socket.on('update', msg => {
-    console.log('update');
-    console.log(msg);
-    $('#usr-count').text(msg.count);
-
-    $('#usr-list').empty();
-    Object.entries(msg.ulist).forEach(([x, c]) => {
-      $('#usr-list').append(
-        '<div id="' + x + '_fileinfo" ucol="' + c + '">' +
-        '<p class="usertitle" usr="' + x + '">' + x + '</p>' +
-        '</div>'
-      );
-    });
-  }); #}
 
   socket.on('ujoin', msg => {
     $('#usr-count').text(msg.count);
