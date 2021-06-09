@@ -1,0 +1,142 @@
+{# Page for the session #}
+{% extends "base.html" %}
+
+{% block head %}
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/usercolours.css') }}">
+
+{# 
+User's personal style
+Adds (you) after all tagged instances of the username 
+#}
+<style>
+.usertitle[usr='{{uname}}']::after {
+  content: " (you)";
+  font-weight: 100;
+}
+</style>
+
+{% endblock %}
+
+{% block top %}
+<script>
+
+var maxsize = Math.pow(1024, 3);
+
+let drophandler = e => {
+  e.preventDefault();
+  let files = e.dataTransfer.files;
+  if (files.length) { file_upload(files[0]); }
+};
+
+let draghandler = e => {
+  e.preventDefault();
+};
+
+let file_upload = f => {
+  if (f.size > maxsize) {
+    alert("File is too large (Max is 1GB)")
+    return;
+  }
+
+  let formData = new FormData();
+  formData.append('file', f);
+
+  let xhr = new XMLHttpRequest();
+  xhr.open('POST', '{{ url_for("upload", s_name=s_name) }}');
+  xhr.send(formData);
+}
+
+let make_id_safe = id => { 
+  return 'file_' + id.replaceAll(/[\(\). ]/g, '_');
+}
+
+$(document).ready( () => {
+  var socket = io()
+  socket.on('connect', function () {
+    socket.emit('join', '{{ s_name }}');
+  });
+
+  socket.on('test', msg => {
+    console.log(msg);
+  });
+
+  socket.on('add_file', msg => {
+    console.log('upload');
+    console.log(msg);
+    $('#' + msg.sender + '_fileinfo').append(
+      '<p id="' + make_id_safe(msg.file) + '"><a target="_blank" rel="noopener noreferrer" href="' + msg.url + '">' + msg.file + '</a><br>' +
+      'from: ' + msg.sender + ', type: ' + msg.f_type + ', size: ' + msg.f_size + '</p>'
+    );
+  });
+
+  socket.on('remove_file', msg => {
+    console.log('download');
+    console.log(msg);
+    $('#' + make_id_safe(msg.file)).remove();
+  });
+
+  {# socket.on('update', msg => {
+    console.log('update');
+    console.log(msg);
+    $('#usr-count').text(msg.count);
+
+    $('#usr-list').empty();
+    Object.entries(msg.ulist).forEach(([x, c]) => {
+      $('#usr-list').append(
+        '<div id="' + x + '_fileinfo" ucol="' + c + '">' +
+        '<p class="usertitle" usr="' + x + '">' + x + '</p>' +
+        '</div>'
+      );
+    });
+  }); #}
+
+  socket.on('ujoin', msg => {
+    $('#usr-count').text(msg.count);
+    $('#usr-list').append(
+      '<div id="' + msg.uname + '_fileinfo" ucol="' + msg.colour + '">' +
+      '<p class="usertitle" usr="' + msg.uname + '">' + msg.uname + '</p>' +
+      '</div>')
+  });
+
+  socket.on('uleave', msg => {
+    $('#usr-count').text(msg.count);
+    $('#' + msg.uname + '_fileinfo').remove();
+  });
+
+  $('#sendmsg').click( () => {
+    var usermsg = $('#chatmsg').val();
+    console.log(usermsg);
+    socket.emit('sendmsg', usermsg);
+    $('#chatmsg').val('');
+  });
+
+  socket.on('recivemsg', msg => {
+    $('#chatzone').append(
+      '<p><span class="usertitle" usr="' + msg.sender + '">' + msg.sender + ' </span>' + $('<div>').text(msg.content).html()
+    );
+  });
+
+});
+</script>
+{% endblock %}
+
+{% block content %}
+<div id="superzone" class="row" ondrop="drophandler(event);" ondragover="draghandler(event);">
+  <div class="lhs">
+    <p>In session: <span id="usr-count">0</span></p>
+    <div id="usr-list">
+    {% for user in ulist %}
+      <div id="{{ user.uname }}_fileinfo" ucol="{{ user.colour }}">
+        <p class="usertitle" usr="{{ user.uname }}">{{ user.uname }}</p>
+      </div>
+    {% endfor %}
+    </div>
+  </div>
+  <div class="rhs">
+    <div id="chatzone"></div>
+    <input id="chatmsg" type="text">
+    <button id="sendmsg" >send</button>
+  </div>
+</div>
+{% endblock %}

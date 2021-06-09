@@ -1,0 +1,18 @@
+div[id$='_fileinfo'][ucol='red'] p {
+    background-color: #ffc8c8;
+}
+div[id$='_fileinfo'][ucol='pink'] p {
+    background-color: #ffc8ff;
+}
+div[id$='_fileinfo'][ucol='blue'] p {
+    background-color: #c8c8ff;
+}
+div[id$='_fileinfo'][ucol='aqua'] p {
+    background-color: #c8ffff;
+}
+div[id$='_fileinfo'][ucol='green'] p {
+    background-color: #c8ffc8;
+}
+div[id$='_fileinfo'][ucol='yellow'] p {
+    background-color: #ffffc8;
+}

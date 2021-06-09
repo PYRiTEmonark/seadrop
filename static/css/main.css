@@ -1,0 +1,57 @@
+html,
+body {
+    height: 100%;
+    margin: 0;
+}
+
+.content {
+    display: flex;
+    flex-flow: column;
+    height: 100%;
+    font-family: 'Yantramanav', sans-serif;
+}
+
+.row {
+    padding: 10px;
+    display: flex;
+    height: 100%;
+}
+  
+.lhs {
+    flex: 66%;
+    margin-right: 10px;
+    min-width: 66%;
+}
+
+.rhs {
+    flex: 33%;
+    border: solid #000 1px;
+    padding: 10px;
+}
+
+form p {
+    margin: 0px;
+}
+
+div[id$='_fileinfo'] {
+    overflow: hidden;
+}
+
+div[id$='_fileinfo'] p {
+    background: #cfd5ff;
+    margin-bottom: 10px;
+}
+
+.usertitle {
+    font-weight: bold;
+    padding: 14px 10px;
+    margin: 0px 0px 10px 0px;
+}
+
+p[id^='file_'] {
+    display: block;
+    float: left;
+    background: inherit;
+    margin: 0px 10px 10px 0px;
+    padding: 5px;
+}

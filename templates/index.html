@@ -1,0 +1,21 @@
+{# Main page #}
+{% extends "base.html" %}
+
+{% block head %}
+<title>Seadrop</title>
+{% endblock %}
+
+{% block top %}
+{% endblock %}
+
+{% block content %}
+<p>Join Session</p>
+<div>
+    <form action="{{ url_for('index') }}", method="POST">
+        <p>username</p><input type="text" name="user-name">
+        <p>session</p><input type="text" name="session">
+        <button type="submit">Join</button>
+    </form>
+</div>
+
+{% endblock %}
