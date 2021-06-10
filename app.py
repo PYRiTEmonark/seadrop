@@ -277,7 +277,8 @@ def get_new_colour(room):
     if room not in rooms: return valid_colours[0]
     used_colours = [users[user]['colour'] for user in rooms[room] if 'colour' in users[user]]
 
-    while (colour := next((x for x in valid_colours if x not in used_colours), None)) == None:
+    sentiel = object()
+    while (colour := next((x for x in valid_colours if x not in used_colours), sentiel)) == sentiel:
         for x in valid_colours: used_colours.remove(x)
 
     return colour
