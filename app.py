@@ -7,6 +7,7 @@ import string
 import uuid
 from mimetypes import guess_type
 
+import bleach
 import filetype
 from flask import (Blueprint, Flask, after_this_request, redirect,
                    render_template, request, send_file, session, url_for)
@@ -37,7 +38,7 @@ def index():
     '''
     if request.method == 'POST':
         f = request.form
-        session['uname'] = f.get('user-name')
+        session['uname'] = sanitize(f.get('user-name'))
 
         return redirect(url_for('in_session', s_name=f['session']))
 
@@ -218,6 +219,8 @@ def on_leave(room):
 
 @socketio.on('sendmsg')
 def msg_sent(msg):
+    msg = sanitize(msg)
+
     if not 'room' in session:
         print(f'{session["uid"]} : WARNING : sent message whilst not in room')
         return
@@ -281,6 +284,8 @@ def ensure_uname(session):
         session['uname'] = oun + str(i)
         i += 1
 
+    session['uname'] = sanitize(session['uname'])
+
     # Generate uid
     # Should only run once but better safe than sorry
     if 'uid' not in session:
@@ -304,6 +309,9 @@ def get_new_colour(room):
         for x in valid_colours: used_colours.remove(x)
 
     return colour
+
+def sanitize(text):
+    return bleach.clean(text, tags=[])
 
 if __name__ == '__main__':
     # ensure store is present and empty

@@ -89,7 +89,7 @@ $(document).ready( () => {
 
   socket.on('recivemsg', msg => {
     $('#chatzone').append(
-      '<p><span class="usertitle" usr="' + msg.sender + '">' + msg.sender + ' </span>' + $('<div>').text(msg.content).html()
+      '<p><span class="usertitle" usr="' + msg.sender + '">' + msg.sender + ' </span>' + msg.content
     );
   });
 
