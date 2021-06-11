@@ -25,13 +25,16 @@ STORE = '.\\store'
 # These could be replaced by a database or something
 # Also merge rooms and files?
 rooms = {} # {<s_name>: [<list of sids>]}
-users = {} # {<sid>: {'uname', 'room', 'colour'}}
+users = {} # {<sid>: {'uname', 'room', 'colour', 'sid'}}
 files = {} # {<s_name>: {<f_name> : {'sender', 'dir', 'tokens'}}}
 
 # Page Routes
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    '''
+    Currently quite basic homepage
+    '''
     if request.method == 'POST':
         f = request.form
         session['uname'] = f.get('user-name')
@@ -42,6 +45,9 @@ def index():
 
 @app.route('/s/<s_name>')
 def in_session(s_name):
+    '''
+    the actual session
+    '''
     ensure_uname(session)
 
     # Set up session, etc.
@@ -72,8 +78,14 @@ def in_session(s_name):
 
 # Back Routes
 
+# TODO: Automatically determine room from session
 @app.route('/upload/<s_name>', methods=['GET', 'POST'])
 def upload(s_name):
+    '''
+    Backend for uploading a file
+    Adds the file to the session ensuring the filename is ok
+    Warning: downloads file to disk
+    '''
 
     if request.method == 'POST':
         f = request.files.get('file')
@@ -96,17 +108,22 @@ def upload(s_name):
         if s_name not in files: files[s_name] = {}
         files[s_name][f_name] = {'sender': session['uname'], 'dir': f_path, 'tokens': []}
 
-        print(f'upload : file {f_name} from {s_name}')
+        print(f'{session["uid"]} : {session["uname"]} uploaded file {f_name} from {s_name}')
 
         # TODO: this helper is unessacary, could be brought back and streamlined
         issue_room_tokens(s_name, f_name, session['uname'], f_path)
 
         return 'successful', 200
-    
+
     return 'Use POST to upload file', 400
 
+# TODO: Automatically determine room from session
 @app.route('/download/<s_name>/<f_name>')
 def download(s_name, f_name):
+    '''
+    Backend for downloading a file
+    Also handles authentication and removal of stale files
+    '''
 
     if s_name not in files or f_name not in files[s_name]:
         return 'Error: File not found', 404
@@ -132,7 +149,7 @@ def download(s_name, f_name):
             os.remove(file_path)
             del files[s_name][f_name]
 
-        print(f'download : file {f_name} from {s_name}')
+        print(f'{session["uid"]} : {session["uname"]} download file {f_name} from {s_name}')
         return response
 
     return send_file(return_data, mimetype=guess_type(f_name)[0],
@@ -143,7 +160,7 @@ def download(s_name, f_name):
 
 @socketio.on('connect')
 def on_connect():
-    print(f'{request.sid} : connected')
+    print(f'{session["uid"]} : {session["uname"]} connected')
     session['sid'] = request.sid
     pass
 
@@ -184,7 +201,7 @@ def on_join(room):
 
     users[session['uid']]['colour'] = get_new_colour(room)
 
-    print(f'{request.sid} : {session["uname"]} joined room {room}')
+    print(f'{session["uid"]} : {session["uname"]} joined room {room}')
     session['room'] = room
     send_user_join(room, users[session['uid']])
 
@@ -202,10 +219,10 @@ def on_leave(room):
 @socketio.on('sendmsg')
 def msg_sent(msg):
     if not 'room' in session:
-        print(f'{request.sid} : WARNING : sent message whilst not in room')
+        print(f'{session["uid"]} : WARNING : sent message whilst not in room')
         return
     
-    print(f'{request.sid} : relaying message {msg}')
+    print(f'{session["uid"]} : {session["uname"]} wrote {msg} to {session["room"]}')
 
     socketio.emit('recivemsg', {
         'sender': session['uname'],
