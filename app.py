@@ -1,9 +1,10 @@
+import io
 import os
 import random
 import secrets
 import shutil
 import string
-import io
+import uuid
 from mimetypes import guess_type
 
 import filetype
@@ -93,10 +94,10 @@ def upload(s_name):
         f_path = os.path.join(store, f_name)
         f.save(f_path)
         if s_name not in files: files[s_name] = {}
-        files[s_name][f_name] = {'sender': session['uname'], 'dir': f_path, 'tokens': {}}
+        files[s_name][f_name] = {'sender': session['uname'], 'dir': f_path, 'tokens': []}
 
         print(f'upload : file {f_name} from {s_name}')
-        
+
         # TODO: this helper is unessacary, could be brought back and streamlined
         issue_room_tokens(s_name, f_name, session['uname'], f_path)
 
@@ -106,18 +107,14 @@ def upload(s_name):
 
 @app.route('/download/<s_name>/<f_name>')
 def download(s_name, f_name):
-    token = request.args.get('token')
 
-    if s_name not in files:
-        return 'Error: File not found', 404
-
-    if f_name not in files[s_name]:
+    if s_name not in files or f_name not in files[s_name]:
         return 'Error: File not found', 404
     
     f_entry = files[s_name][f_name]
 
-    if token not in f_entry['tokens']:
-        return 'Error: Token not in file', 403
+    if session['uid'] not in f_entry['tokens']:
+        return 'Error: User cannot download file or has already downloaded the file', 403
 
     file_path = f_entry['dir']
 
@@ -128,8 +125,8 @@ def download(s_name, f_name):
 
     @after_this_request
     def after(response):
-        socketio.emit('remove_file', {'file': f_name}, to=f_entry['tokens'][token])
-        files[s_name][f_name]['tokens'].pop(token)
+        socketio.emit('remove_file', {'file': f_name}, to=users[session['uid']]['sid'])
+        files[s_name][f_name]['tokens'].remove(session['uid'])
 
         if files[s_name][f_name]['tokens'] == []:
             os.remove(file_path)
@@ -152,7 +149,7 @@ def on_connect():
 
 @socketio.on('disconnect')
 def on_disconnect():
-    user = request.sid
+    user = session['uid']
     if user in users:
         room = users[user]['room']
         print(f'{user} : {users[user]["uname"]} disconnected from {room}')
@@ -166,7 +163,7 @@ def on_disconnect():
                     del files[room][name]
 
         rooms[room].remove(user)
-        send_user_leave(room, users[request.sid])
+        send_user_leave(room, users[session['uid']])
         del users[user]
 
     else:
@@ -178,25 +175,25 @@ def on_join(room):
 
     ensure_uname(session)
 
-    users[request.sid] = {'room': room, 'uname': session['uname']}
+    users[session['uid']] = {'room': room, 'uname': session['uname'], 'sid': request.sid}
 
     if room in rooms:
-        rooms[room].append(request.sid)
+        rooms[room].append(session['uid'])
     else:
-        rooms[room] = [request.sid]
+        rooms[room] = [session['uid']]
 
-    users[request.sid]['colour'] = get_new_colour(room)
+    users[session['uid']]['colour'] = get_new_colour(room)
 
     print(f'{request.sid} : {session["uname"]} joined room {room}')
     session['room'] = room
-    send_user_join(room, users[request.sid])
+    send_user_join(room, users[session['uid']])
 
 @socketio.on('leave')
 def on_leave(room):
     rooms[room].remove(request.sid)
     del session['room']
 
-    send_user_leave(room, users[request.sid])
+    send_user_leave(room, users[session['uid']])
 
     # Clean up old rooms
     if not rooms[room]:
@@ -218,14 +215,14 @@ def msg_sent(msg):
 # Helper functions
 
 def issue_room_tokens(s_name, f_name, sender, f_path):
+    f_type = filetype.guess(f_path)
+    
     for user in rooms[s_name]:
-        token = secrets.token_urlsafe()
-        files[s_name][f_name]['tokens'][token] = user
-        f_type = filetype.guess(f_path)
+        files[s_name][f_name]['tokens'].append(user)
         socketio.emit('add_file',
-            {'file': f_name, 'url': url_for('download', s_name=s_name, f_name=f_name, token=token),
+            {'file': f_name, 'url': url_for('download', s_name=s_name, f_name=f_name),
             'sender': sender, 'f_type': f_type.mime if f_type else '?', 'f_size': format_bytes(os.path.getsize(f_path))},
-            to=user)
+            to=users[user]['sid'])
 
 # def send_room_update(room):
     # ulist = {users[user]['uname'] : users[user]['colour'] for user in rooms[room]}
@@ -254,14 +251,16 @@ def format_bytes(size):
     return str(round(size, 2)) + labels[n]
 
 def ensure_uname(session):
+    '''
+    ensure session has id and uname
+    '''
+
     if not 'uname' in session:
         # TODO: generate proper guest strings
         session['uname'] = 'Guest-' + ''.join((random.choice(string.ascii_letters) for _ in range(5)))
 
     # ensure username is unique to prevent imitation
     # and also make my life easier by allowing messages to be sent by username
-    # this removes the need for some convoluted id
-    # note that there is a small chance that two people will get the same guest string
 
     oun = session['uname']
     i = 1
@@ -269,11 +268,21 @@ def ensure_uname(session):
         session['uname'] = oun + str(i)
         i += 1
 
-# Issue a new, unused colour
-# If all colours have been issued, start again
-# TODO: Reconsider this?
+    # Generate uid
+    # Should only run once but better safe than sorry
+    if 'uid' not in session:
+        uid = None
+        while not uid or uid in users:
+            uid = uuid.uuid4().hex
+        
+        session['uid'] = uid
+
 valid_colours = ['red', 'pink', 'blue', 'aqua', 'green', 'yellow']
 def get_new_colour(room):
+    '''
+    Issue a new, unused colour
+    If all colours have been issued, start again
+    '''
     if room not in rooms: return valid_colours[0]
     used_colours = [users[user]['colour'] for user in rooms[room] if 'colour' in users[user]]
 
