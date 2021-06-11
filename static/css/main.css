@@ -27,6 +27,7 @@ body {
     flex: 33%;
     border: solid #000 1px;
     padding: 10px;
+    position: relative;
 }
 
 form p {
@@ -54,4 +55,14 @@ p[id^='file_'] {
     background: inherit;
     margin: 0px 10px 10px 0px;
     padding: 5px;
+}
+
+#chatcontrol {
+    bottom: 0;
+    position: absolute;
+    padding: 0px 0px 10px 0px;
+}
+
+#chatzone p {
+    margin: 0px;
 }

@@ -19,6 +19,8 @@ Adds (you) after all tagged instances of the username
 {% endblock %}
 
 {% block top %}
+{# TODO: should make some of these methods consistent
+  i.e. some use jquery others use html to handle events #}
 <script>
 
 var maxsize = Math.pow(1024, 3);
@@ -85,6 +87,12 @@ $(document).ready( () => {
     $('#' + msg.uname + '_fileinfo').remove();
   });
 
+  socket.on('recivemsg', msg => {
+    $('#chatzone').append(
+      '<p><span class="usertitle" usr="' + msg.sender + '">' + msg.sender + ' </span>' + $('<div>').text(msg.content).html()
+    );
+  });
+
   $('#sendmsg').click( () => {
     var usermsg = $('#chatmsg').val();
     console.log(usermsg);
@@ -92,10 +100,8 @@ $(document).ready( () => {
     $('#chatmsg').val('');
   });
 
-  socket.on('recivemsg', msg => {
-    $('#chatzone').append(
-      '<p><span class="usertitle" usr="' + msg.sender + '">' + msg.sender + ' </span>' + $('<div>').text(msg.content).html()
-    );
+  $('#chatmsg').keypress( e => {
+    if(e.keyCode==13) { $('#sendmsg').click() }
   });
 
 });
@@ -116,8 +122,10 @@ $(document).ready( () => {
   </div>
   <div class="rhs">
     <div id="chatzone"></div>
-    <input id="chatmsg" type="text">
-    <button id="sendmsg" >send</button>
+    <div id="chatcontrol">  
+      <input id="chatmsg" type="text">
+      <button id="sendmsg" >send</button>
+    </div>
   </div>
 </div>
 {% endblock %}
