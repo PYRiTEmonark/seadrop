@@ -241,10 +241,6 @@ def issue_room_tokens(s_name, f_name, sender, f_path):
             'sender': sender, 'f_type': f_type.mime if f_type else '?', 'f_size': format_bytes(os.path.getsize(f_path))},
             to=users[user]['sid'])
 
-# def send_room_update(room):
-    # ulist = {users[user]['uname'] : users[user]['colour'] for user in rooms[room]}
-    # socketio.emit('update', {'ulist': ulist, 'count': len(ulist)}, to=room)
-
 def send_user_join(room, user):
     socketio.emit('ujoin', {
         'uname': user['uname'],
