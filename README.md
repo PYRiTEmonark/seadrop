@@ -1,6 +1,12 @@
 # Seadrop - Simplifying file transfers
 
-Seadrop is a website allowing users to send files to all other users in a given session. Once downloaded, files will disappear from the server.
+Seadrop is a website allowing users to send files to all other users in a given session.
+Once downloaded, files will disappear from the server.
+
+# Setup
+
+To set up seadrop copy `example_config.json` to `config.json`.
+Remember to add a secret key, you can generate one using `os.urandom(24).hex`.
 
 # Current architecture
 

@@ -1,0 +1,6 @@
+{
+    "secret_key" : "SET ME",
+    "SEND_FILE_MAX_AGE_DEFAULT" : 0,
+    "MAX_CONTENT_LENGTH" : 1073741824,
+    "FILE_STORE" : ".\\store"
+}

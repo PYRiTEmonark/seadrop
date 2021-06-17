@@ -1,10 +1,10 @@
 import io
 import os
 import random
-import secrets
 import shutil
 import string
 import uuid
+import json
 from mimetypes import guess_type
 
 import bleach
@@ -15,13 +15,11 @@ from flask_socketio import SocketIO, emit, join_room
 
 # App init
 app = Flask(__name__)
-app.secret_key = b'\xa6\xa2GX\x19x/\xb5HI\xe3\x9b\xa3[\xd6\xda'
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
-app.config['MAX_CONTENT_LENGTH'] = 1024**3
+with open('config.json') as config_file:
+    config_data = json.load(config_file)
+    app.config.update(config_data)
 
 socketio = SocketIO(app)
-
-STORE = '.\\store'
 
 # These could be replaced by a database or something
 # Also merge rooms and files?
@@ -57,7 +55,7 @@ def in_session(s_name):
     else:
         files[s_name] = {}
         f_names = []
-        store = os.path.join(STORE, s_name)
+        store = os.path.join(app.config['STORE'], s_name)
 
         try:
             shutil.rmtree(store)
@@ -96,7 +94,7 @@ def upload(s_name):
 
         f_name = f.filename
         ofn, ext = os.path.splitext(f_name)
-        store = os.path.join(STORE, s_name)
+        store = os.path.join(app.config['FILE_STORE'], s_name)
 
         # Avoid Duplicate files
         i = 1
@@ -316,10 +314,10 @@ def sanitize(text):
 if __name__ == '__main__':
     # ensure store is present and empty
     try:
-        shutil.rmtree(STORE)
+        shutil.rmtree(app.config['FILE_STORE'])
     except FileNotFoundError:
         pass
 
-    os.makedirs(STORE)
+    os.makedirs(app.config['FILE_STORE'])
 
     socketio.run(app, host="0.0.0.0")
