@@ -17,7 +17,9 @@ from flask_socketio import SocketIO, emit, join_room
 app = Flask(__name__)
 with open('config.json') as config_file:
     config_data = json.load(config_file)
-    app.config.update(config_data)
+
+app.secret_key = config_data['secret_key']
+app.config.update(config_data['app'])
 
 socketio = SocketIO(app)
 
@@ -55,7 +57,7 @@ def in_session(s_name):
     else:
         files[s_name] = {}
         f_names = []
-        store = os.path.join(app.config['STORE'], s_name)
+        store = os.path.join(app.config['FILE_STORE'], s_name)
 
         try:
             shutil.rmtree(store)
