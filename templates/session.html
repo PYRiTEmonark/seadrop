@@ -25,17 +25,17 @@ Adds (you) after all tagged instances of the username
 
 var maxsize = Math.pow(1024, 3);
 
-let drophandler = e => {
+function drophandler(e) {
   e.preventDefault();
   let files = e.dataTransfer.files;
   if (files.length) { file_upload(files[0]); }
 };
 
-let draghandler = e => {
+function draghandler(e) {
   e.preventDefault();
 };
 
-let file_upload = f => {
+function file_upload(f) {
   if (f.size > maxsize) {
     alert("File is too large (Max is 1GB)")
     return;
@@ -49,9 +49,15 @@ let file_upload = f => {
   xhr.send(formData);
 }
 
-let make_id_safe = id => { 
+function make_id_safe(id) { 
   return 'file_' + id.replaceAll(/[\(\). ]/g, '_');
 }
+
+function form_submit(e) {
+  e.preventDefault()
+  var f = $('#fupload').prop('files')
+  if (f.length) { file_upload(f[0]) }
+} 
 
 $(document).ready( () => {
   var socket = io()
@@ -105,6 +111,11 @@ $(document).ready( () => {
   });
 
 });
+
+$(window).on('beforeunload', e => {
+  socket.emit('leave', '{{ s_name }}')
+})
+
 </script>
 {% endblock %}
 

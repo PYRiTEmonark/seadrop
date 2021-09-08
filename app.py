@@ -7,9 +7,8 @@ import uuid
 import json
 from mimetypes import guess_type
 
-import bleach
 import filetype
-from flask import (Blueprint, Flask, after_this_request, redirect,
+from flask import (Blueprint, Flask, after_this_request, redirect, escape,
                    render_template, request, send_file, session, url_for)
 from flask_socketio import SocketIO, emit, join_room
 
@@ -292,7 +291,7 @@ def ensure_uname(session):
         uid = None
         while not uid or uid in users:
             uid = uuid.uuid4().hex
-        
+
         session['uid'] = uid
 
 valid_colours = ['red', 'pink', 'blue', 'aqua', 'green', 'yellow']
@@ -311,7 +310,7 @@ def get_new_colour(room):
     return colour
 
 def sanitize(text):
-    return bleach.clean(text, tags=[])
+    return escape(text)
 
 if __name__ == '__main__':
     # ensure store is present and empty
