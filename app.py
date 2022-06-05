@@ -9,7 +9,7 @@ from mimetypes import guess_type
 
 import filetype
 from flask import (Blueprint, Flask, after_this_request, redirect, escape,
-                   render_template, request, send_file, session, url_for)
+                   render_template, request, send_file, session, url_for, redirect)
 from flask_socketio import SocketIO, emit, join_room
 
 # App init
@@ -37,7 +37,8 @@ def index():
     '''
     if request.method == 'POST':
         f = request.form
-        session['uname'] = sanitize(f.get('user-name'))
+        if not ('uname' in session and session['uname']):
+            session['uname'] = sanitize(f.get('user-name'))
 
         return redirect(url_for('in_session', s_name=f['session']))
 
@@ -65,20 +66,26 @@ def in_session(s_name):
 
         os.makedirs(store)
 
-    if s_name not in rooms: rooms[s_name] = []
+    if s_name in rooms:
+        if session['uid'] in rooms[s_name]:
+           return redirect(url_for('index'))
+    else:
+        rooms[s_name] = []
+
+    print('all users:', users)
+    print('users in room:', rooms[s_name])
 
     ulist = [
         {
             'uname' : users[user]['uname'],
             'colour' : users[user]['colour']
-        } for user in rooms[s_name]
+        } for user in rooms[s_name] if user in users
     ]
 
     return render_template("session.html", s_name=s_name, ulist=ulist, uname=session['uname'])
 
 # Back Routes
 
-# TODO: Automatically determine room from session
 @app.route('/upload/<s_name>', methods=['GET', 'POST'])
 def upload(s_name):
     '''
@@ -117,7 +124,6 @@ def upload(s_name):
 
     return 'Use POST to upload file', 400
 
-# TODO: Automatically determine room from session
 @app.route('/download/<s_name>/<f_name>')
 def download(s_name, f_name):
     '''
@@ -162,7 +168,6 @@ def download(s_name, f_name):
 def on_connect():
     print(f'{session["uid"]} : {session["uname"]} connected')
     session['sid'] = request.sid
-    pass
 
 @socketio.on('disconnect')
 def on_disconnect():
@@ -181,7 +186,7 @@ def on_disconnect():
 
         rooms[room].remove(user)
         send_user_leave(room, users[session['uid']])
-        del users[user]
+        # del users[user]
 
     else:
         print(f'{user} : disconnected')
@@ -202,13 +207,13 @@ def on_join(room):
     users[session['uid']]['colour'] = get_new_colour(room)
 
     print(f'{session["uid"]} : {session["uname"]} joined room {room}')
-    session['room'] = room
+    session['room'].append(room)
     send_user_join(room, users[session['uid']])
 
 @socketio.on('leave')
 def on_leave(room):
-    rooms[room].remove(request.sid)
-    del session['room']
+    rooms[room].remove(session['uid'])
+    session['room'].remove(room)
 
     send_user_leave(room, users[session['uid']])
 
@@ -217,17 +222,17 @@ def on_leave(room):
         del rooms[room]
 
 @socketio.on('sendmsg')
-def msg_sent(msg):
+def msg_sent(room, msg):
     msg = sanitize(msg)
 
-    if not 'room' in session:
-        print(f'{session["uid"]} : WARNING : sent message whilst not in room')
-        return
-    
-    print(f'{session["uid"]} : {session["uname"]} wrote {msg} to {session["room"]}')
+    # if not 'room' in session:
+    #     print(f'{session["uid"]} : WARNING : sent message whilst not in room')
+    #     return
+
+    print(f'{session["uid"]} : {session["uname"]} wrote {msg} to {room}')
 
     socketio.emit('recivemsg', {
-        'sender': session['uname'],
+        'sender': room,
         'content': msg
     }, to=session['room'])
 
@@ -303,8 +308,8 @@ def get_new_colour(room):
     if room not in rooms: return valid_colours[0]
     used_colours = [users[user]['colour'] for user in rooms[room] if 'colour' in users[user]]
 
-    sentiel = object()
-    while (colour := next((x for x in valid_colours if x not in used_colours), sentiel)) == sentiel:
+    s = object()
+    while (colour := next((x for x in valid_colours if x not in used_colours), s)) == s:
         for x in valid_colours: used_colours.remove(x)
 
     return colour
@@ -320,5 +325,7 @@ if __name__ == '__main__':
         pass
 
     os.makedirs(app.config['FILE_STORE'])
+
+    app.logger.disabled = True
 
     socketio.run(app, host="0.0.0.0")
