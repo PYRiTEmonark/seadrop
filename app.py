@@ -1,32 +1,37 @@
 import io
+import json
 import os
 import random
 import shutil
 import string
 import uuid
-import json
 from mimetypes import guess_type
 
 import filetype
-from flask import (Blueprint, Flask, after_this_request, redirect, escape,
-                   render_template, request, send_file, session, url_for, redirect)
+from flask import (Flask, after_this_request, escape, flash, redirect,
+                   render_template, request, send_file, session, url_for)
 from flask_socketio import SocketIO, emit, join_room
+
+from utils import format_bytes, sanitize
 
 # App init
 app = Flask(__name__)
 with open('config.json') as config_file:
     config_data = json.load(config_file)
 
-app.secret_key = config_data['secret_key']
+# Secret key is randomized to prevent sessions being carried over
+# Does cause join listener to crap itself all over log
+app.secret_key = os.urandom(30).hex()
+
 app.config.update(config_data['app'])
 
 socketio = SocketIO(app)
 
 # These could be replaced by a database or something
 # Also merge rooms and files?
-rooms = {} # {<s_name>: [<list of sids>]}
-users = {} # {<sid>: {'uname', 'room', 'colour', 'sid'}}
-files = {} # {<s_name>: {<f_name> : {'sender', 'dir', 'tokens'}}}
+rooms = {} # {<room_name>: [<list of sids>]}
+files = {} # {<room_name>: {<f_name> : {'sender', 'dir', 'tokens'}}}
+users = {} # {<uid>: {'uname', 'rooms', 'colour', 'sid'}}
 
 # Page Routes
 
@@ -35,29 +40,34 @@ def index():
     '''
     Currently quite basic homepage
     '''
+
+    session['room'] = ''
+
+    # if session.get('room'):
+    #     return redirect(url_for('in_session', room_name=session['room']))
+
     if request.method == 'POST':
         f = request.form
-        if not ('uname' in session and session['uname']):
-            session['uname'] = sanitize(f.get('user-name'))
+        # if not ('uname' in session and session['uname']):
+        session['uname'] = sanitize(f.get('user-name'))
 
-        return redirect(url_for('in_session', s_name=f['session']))
+        return redirect(url_for('in_session', room_name=f['session']))
 
     return render_template("index.html")
 
-@app.route('/s/<s_name>')
-def in_session(s_name):
+@app.route('/s/<room_name>')
+def in_session(room_name):
     '''
     the actual session
     '''
     ensure_uname(session)
 
-    # Set up session, etc.
-    if s_name in files:
-        f_names = list(files[s_name].keys())
-    else:
-        files[s_name] = {}
-        f_names = []
-        store = os.path.join(app.config['FILE_STORE'], s_name)
+    print(session['uname'], 'joining', room_name)
+
+    # Set up room filestore
+    if room_name not in files:
+        files[room_name] = {}
+        store = os.path.join(app.config['FILE_STORE'], room_name)
 
         try:
             shutil.rmtree(store)
@@ -66,28 +76,27 @@ def in_session(s_name):
 
         os.makedirs(store)
 
-    if s_name in rooms:
-        if session['uid'] in rooms[s_name]:
-           return redirect(url_for('index'))
-    else:
-        rooms[s_name] = []
+    if room_name not in rooms:
+        rooms[room_name] = []
 
-    print('all users:', users)
-    print('users in room:', rooms[s_name])
+
+    # User does not join session until the join message
+    # session['room'] = room_name
 
     ulist = [
         {
             'uname' : users[user]['uname'],
             'colour' : users[user]['colour']
-        } for user in rooms[s_name] if user in users
+        } for user in rooms[room_name] if user in users
     ]
+    print('users already in room:', ulist)
 
-    return render_template("session.html", s_name=s_name, ulist=ulist, uname=session['uname'])
+    return render_template("room.html", room_name=room_name, ulist=ulist, uname=session['uname'])
 
 # Back Routes
 
-@app.route('/upload/<s_name>', methods=['GET', 'POST'])
-def upload(s_name):
+@app.route('/upload/<room_name>', methods=['GET', 'POST'])
+def upload(room_name):
     '''
     Backend for uploading a file
     Adds the file to the session ensuring the filename is ok
@@ -102,7 +111,7 @@ def upload(s_name):
 
         f_name = f.filename
         ofn, ext = os.path.splitext(f_name)
-        store = os.path.join(app.config['FILE_STORE'], s_name)
+        store = os.path.join(app.config['FILE_STORE'], room_name)
 
         # Avoid Duplicate files
         i = 1
@@ -112,29 +121,29 @@ def upload(s_name):
 
         f_path = os.path.join(store, f_name)
         f.save(f_path)
-        if s_name not in files: files[s_name] = {}
-        files[s_name][f_name] = {'sender': session['uname'], 'dir': f_path, 'tokens': []}
+        if room_name not in files: files[room_name] = {}
+        files[room_name][f_name] = {'sender': session['uname'], 'dir': f_path, 'tokens': []}
 
-        print(f'{session["uid"]} : {session["uname"]} uploaded file {f_name} from {s_name}')
+        print(f'{session["uid"]} : {session["uname"]} uploaded file {f_name} from {room_name}')
 
         # TODO: this helper is unessacary, could be brought back and streamlined
-        issue_room_tokens(s_name, f_name, session['uname'], f_path)
+        issue_room_tokens(room_name, f_name, session['uname'], f_path)
 
         return 'successful', 200
 
     return 'Use POST to upload file', 400
 
-@app.route('/download/<s_name>/<f_name>')
-def download(s_name, f_name):
+@app.route('/download/<room_name>/<f_name>')
+def download(room_name, f_name):
     '''
     Backend for downloading a file
     Also handles authentication and removal of stale files
     '''
 
-    if s_name not in files or f_name not in files[s_name]:
+    if room_name not in files or f_name not in files[room_name]:
         return 'Error: File not found', 404
     
-    f_entry = files[s_name][f_name]
+    f_entry = files[room_name][f_name]
 
     if session['uid'] not in f_entry['tokens']:
         return 'Error: User cannot download file or has already downloaded the file', 403
@@ -149,13 +158,13 @@ def download(s_name, f_name):
     @after_this_request
     def after(response):
         socketio.emit('remove_file', {'file': f_name}, to=users[session['uid']]['sid'])
-        files[s_name][f_name]['tokens'].remove(session['uid'])
+        files[room_name][f_name]['tokens'].remove(session['uid'])
 
-        if files[s_name][f_name]['tokens'] == []:
+        if files[room_name][f_name]['tokens'] == []:
             os.remove(file_path)
-            del files[s_name][f_name]
+            del files[room_name][f_name]
 
-        print(f'{session["uid"]} : {session["uname"]} download file {f_name} from {s_name}')
+        print(f'{session["uid"]} : {session["uname"]} download file {f_name} from {room_name}')
         return response
 
     return send_file(return_data, mimetype=guess_type(f_name)[0],
@@ -169,12 +178,15 @@ def on_connect():
     print(f'{session["uid"]} : {session["uname"]} connected')
     session['sid'] = request.sid
 
+    if session['uid'] in users:
+        users[session['uid']]['sid'] = request.sid
+
 @socketio.on('disconnect')
 def on_disconnect():
-    user = session['uid']
+    user = [k for k,v in users.items() if v['sid'] == request.sid][0]
     if user in users:
         room = users[user]['room']
-        print(f'{user} : {users[user]["uname"]} disconnected from {room}')
+        print(f'{user} : {users[user]["uname"]} disconnected')
 
         # remove files
         if room in files:
@@ -184,19 +196,28 @@ def on_disconnect():
                     os.remove(entry['dir'])
                     del files[room][name]
 
-        rooms[room].remove(user)
-        send_user_leave(room, users[session['uid']])
-        # del users[user]
+        if user in rooms[room]:
+            rooms[room].remove(user)
+            send_user_leave(room, users[session['uid']])
+
+        if user in users:
+            del users[user]
 
     else:
-        print(f'{user} : disconnected')
+        print(f'{user} : {session.get("uname")} disconnected')
 
 @socketio.on('join')
 def on_join(room):
     join_room(room)
 
-    ensure_uname(session)
+    # ensure_uname(session)
+    # if session['room'] == room: return
 
+    # Rejoin on reload
+    if session['uid'] in rooms[room]:
+        on_leave(room)
+
+    session['room'] = room
     users[session['uid']] = {'room': room, 'uname': session['uname'], 'sid': request.sid}
 
     if room in rooms:
@@ -207,13 +228,16 @@ def on_join(room):
     users[session['uid']]['colour'] = get_new_colour(room)
 
     print(f'{session["uid"]} : {session["uname"]} joined room {room}')
-    session['room'].append(room)
+    # session['room']
     send_user_join(room, users[session['uid']])
 
 @socketio.on('leave')
 def on_leave(room):
+
+    print(f'{session["uid"]} : {session["uname"]} left room {room}')
+
     rooms[room].remove(session['uid'])
-    session['room'].remove(room)
+    session['room'] = ''
 
     send_user_leave(room, users[session['uid']])
 
@@ -222,29 +246,29 @@ def on_leave(room):
         del rooms[room]
 
 @socketio.on('sendmsg')
-def msg_sent(room, msg):
+def msg_sent(msg):
     msg = sanitize(msg)
 
     # if not 'room' in session:
     #     print(f'{session["uid"]} : WARNING : sent message whilst not in room')
     #     return
 
-    print(f'{session["uid"]} : {session["uname"]} wrote {msg} to {room}')
+    print(f'{session["uid"]} : {session["uname"]} wrote {msg} to {session["room"]}')
 
     socketio.emit('recivemsg', {
-        'sender': room,
+        'sender': session["uname"],
         'content': msg
     }, to=session['room'])
 
 # Helper functions
 
-def issue_room_tokens(s_name, f_name, sender, f_path):
+def issue_room_tokens(room_name, f_name, sender, f_path):
     f_type = filetype.guess(f_path)
     
-    for user in rooms[s_name]:
-        files[s_name][f_name]['tokens'].append(user)
+    for user in rooms[room_name]:
+        files[room_name][f_name]['tokens'].append(user)
         socketio.emit('add_file',
-            {'file': f_name, 'url': url_for('download', s_name=s_name, f_name=f_name),
+            {'file': f_name, 'url': url_for('download', room_name=room_name, f_name=f_name),
             'sender': sender, 'f_type': f_type.mime if f_type else '?', 'f_size': format_bytes(os.path.getsize(f_path))},
             to=users[user]['sid'])
 
@@ -261,15 +285,6 @@ def send_user_leave(room, user):
         'count': len(rooms[room])
     }, to=room)
 
-def format_bytes(size):
-    power = 2**10
-    n = 0
-    labels = ['B', 'KB', 'MB', 'GB', 'TB']
-    while size > power:
-        size /= power
-        n += 1
-    return str(round(size, 2)) + labels[n]
-
 def ensure_uname(session):
     '''
     ensure session has id and uname
@@ -282,11 +297,11 @@ def ensure_uname(session):
     # ensure username is unique to prevent imitation
     # and also make my life easier by allowing messages to be sent by username
 
-    oun = session['uname']
-    i = 1
-    while session['uname'] in [user['uname'] for user in users.values()]:
-        session['uname'] = oun + str(i)
-        i += 1
+    # oun = session['uname']
+    # i = 1
+    # while session['uname'] in [user['uname'] for user in users.values()]:
+    #     session['uname'] = oun + str(i)
+    #     i += 1
 
     session['uname'] = sanitize(session['uname'])
 
@@ -313,9 +328,6 @@ def get_new_colour(room):
         for x in valid_colours: used_colours.remove(x)
 
     return colour
-
-def sanitize(text):
-    return escape(text)
 
 if __name__ == '__main__':
     # ensure store is present and empty

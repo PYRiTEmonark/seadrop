@@ -19,11 +19,11 @@ Adds (you) after all tagged instances of the username
 {% endblock %}
 
 {% block top %}
-{# TODO: should make some of these methods consistent
-  i.e. some use jquery others use html to handle events #}
+{# TODO: eliminate JQuery #}
 <script>
 
-var maxsize = Math.pow(1024, 3);
+// This is silly but it makes the highlighting work
+var maxsize = parseInt('{{ config["MAX_CONTENT_LENGTH"] }}');
 
 function drophandler(e) {
   e.preventDefault();
@@ -45,7 +45,7 @@ function file_upload(f) {
   formData.append('file', f);
 
   let xhr = new XMLHttpRequest();
-  xhr.open('POST', '{{ url_for("upload", s_name=s_name) }}');
+  xhr.open('POST', '{{ url_for("upload", room_name=room_name) }}');
   xhr.send(formData);
 }
 
@@ -62,7 +62,7 @@ function form_submit(e) {
 $(document).ready( () => {
   var socket = io()
   socket.on('connect', function () {
-    socket.emit('join', '{{ s_name }}');
+    socket.emit('join', '{{ room_name }}');
   });
 
   socket.on('add_file', msg => {
@@ -106,15 +106,16 @@ $(document).ready( () => {
     $('#chatmsg').val('');
   });
 
+  $('#leaveroom').click( () => {
+    socket.emit('leave', '{{ room_name }}')
+    window.location.replace('{{ url_for("index") }}')
+  })
+
   $('#chatmsg').keypress( e => {
     if(e.keyCode==13) { $('#sendmsg').click() }
   });
 
 });
-
-$(window).on('beforeunload', e => {
-  socket.emit('leave', '{{ s_name }}')
-})
 
 </script>
 {% endblock %}
@@ -122,6 +123,7 @@ $(window).on('beforeunload', e => {
 {% block content %}
 <div id="superzone" class="row" ondrop="drophandler(event);" ondragover="draghandler(event);">
   <div class="lhs">
+    <button id="leaveroom">Leave Room</button>
     <p>In session: <span id="usr-count">0</span></p>
     <div id="usr-list">
     {% for user in ulist %}

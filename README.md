@@ -6,7 +6,7 @@ Once downloaded, files will disappear from the server.
 # Setup
 
 To set up seadrop copy `example_config.json` to `config.json`.
-Remember to add a secret key, you can generate one using `os.urandom(24).hex`.
+<!-- Remember to add a secret key, you can generate one using `os.urandom(24).hex`. -->
 
 # Current architecture
 

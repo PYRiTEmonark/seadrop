@@ -13,7 +13,7 @@
 <div>
     <form action="{{ url_for('index') }}", method="POST">
         {% if 'uname' in session and session['uname'] %}
-        <p>username</p><input type="text" name="user-name" disabled value="{{session['uname']}}">
+        <p>username</p><input type="text" name="user-name" value="{{session['uname']}}">
         {% else %}
         <p>username</p><input type="text" name="user-name">
         {% endif %}
